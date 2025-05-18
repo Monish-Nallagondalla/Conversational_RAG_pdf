@@ -1,6 +1,6 @@
 import streamlit as st
-from langchain.chains import create_history_aware_retriever
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_history_aware_retriever ,create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain 
 from langchain_chroma import Chroma 
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
@@ -94,3 +94,32 @@ if api_key:
                     ("human", "{input}"),
                 ]
             )
+
+        question_answer_chain = create_stuff_documents_chain(llm,qa_prompt)
+        rag_chain = create_retrieval_chain(history_aware_retriever,question_answer_chain)
+
+        def get_session_history(session:str)-> BaseChatMessageHistory:
+            if session_id not in st.session_state.store:
+                st.session_state.store[session_id] = ChatMessageHistory()
+            return st.session_state.store[session_id]
+        
+        conversational_rag_chain = RunnableWithMessageHistory(
+            rag_chain,get_session_history,
+            input_messages_key = 'input',
+            history_messages_key ='Chat_history',
+            output_messages_key='answer'
+        )
+
+        user_input = st.text_input('your question:')
+        if user_input:
+            session_history = get_session_history(session_id)
+            response = conversational_rag_chain.invoke(
+                {'input':user_input},
+                config={'configurable':{'session_id':session_id}
+                        }
+            )
+            st.write(st.session_state.store)
+            st.write("Assistant:", response['answer'])
+            st.write("Chat History:", session_history.messages)
+else:
+    st.warning("Please enter the GRoq API Key")
